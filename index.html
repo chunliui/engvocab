@@ -16,7 +16,13 @@ body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Micr
 .bar{height:6px;border-radius:99px;background:rgba(255,255,255,.28);overflow:hidden;margin-top:6px}
 .bar i{display:block;height:100%;background:#fbbf24;border-radius:99px;transition:width .3s}
 .qbar{display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:14px}
-.word{font-size:38px;font-weight:700;letter-spacing:.4px;word-break:break-word;line-height:1.2;margin:6px 0 4px}
+.wordline{display:flex;align-items:center;gap:10px;margin:6px 0 4px}
+.word{font-size:38px;font-weight:700;letter-spacing:.4px;word-break:break-word;line-height:1.2}
+.spk{border:0;background:#e6fffa;color:#0f766e;border-radius:50%;width:44px;height:44px;font-size:20px;flex:0 0 auto;cursor:pointer}
+.spk:active{background:#ccfbf1}
+.spk.sm{width:28px;height:28px;font-size:14px;background:transparent}
+.mini{border:1px solid #cbd5e1;background:#fff;color:#0f766e;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;margin-top:12px;cursor:pointer}
+.tog{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;color:#374151}
 .ph{font-size:13px;color:#9ca3af;margin-bottom:14px}
 .reveal{border-top:1px dashed #e5e7eb;padding-top:14px;margin-top:4px}
 .reveal .en{font-size:17px;color:#0f766e;font-weight:600;line-height:1.5}
@@ -74,6 +80,7 @@ a{color:#0f766e}
     <div style="padding-top:14px">
       <select class="sel" id="esel"></select>
       <div class="plain" style="margin-top:14px" id="stat"></div>
+      <label class="tog"><input type="checkbox" id="autospk" checked> 换到新词时自动读一遍</label>
       <button class="btn ghost" id="reset" style="margin-top:14px">清空本页记录</button>
     </div>
   </details>
@@ -85,6 +92,7 @@ a{color:#0f766e}
       再把他简介里点名的重点词提到最前面，每集取 <b>30 个</b>。取的时候有个硬条件：<b>这个词在这一集里至少出现 3 次</b>——出现一次的偶然词不进卡，因为它没有语境可依。<br><br>
       例句和中文都是那一集的原句原译，所以看到词就看到了它真正用在哪。<br><br>
       <b>没有给中文释义是有意的</b>：直接看「duvet＝被子」是记不住的，看「My body is warm under the duvet. 被窝里很暖和」才记得住。<br><br>
+      <b>语音</b>是用手机自带的朗读（iPhone 的「朗读内容」/ 安卓的「文字转语音」），不联网、不装东西、不花钱。点 🔊 读单词，点「读这一句」读整句。如果没声音，去手机设置里检查有没有装英文语音包。<br><br>
       一天 5 个，一集 30 个够你走 6 天。一集在 30 天计划里只有 2–5 天，所以<b>词永远是备着的，比你的进度多</b>——别追，多出来的放着，下次路过这集再捡。
     </div>
   </details>
@@ -96,6 +104,29 @@ var KEY = 'engvocab.v1';
 var E30 = 'eng30.v1';
 function load(k){ try { return JSON.parse(localStorage.getItem(k)||'{}')||{}; } catch(e){ return {}; } }
 function save(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+var SYN = (typeof window !== 'undefined' && window.speechSynthesis) ? window.speechSynthesis : null;
+var VOICES = [], TOUCHED = false;
+function refreshVoices(){ try { VOICES = SYN.getVoices() || []; } catch(e){ VOICES = []; } }
+function pickVoice(){
+  if (SYN && !VOICES.length) refreshVoices();
+  var pref = ['Samantha','Google US English','Microsoft Aria','Microsoft Zira','Google UK English Female','Karen','Daniel','Alex'];
+  for (var i=0;i<pref.length;i++) for (var j=0;j<VOICES.length;j++) if (VOICES[j].name.indexOf(pref[i]) >= 0) return VOICES[j];
+  for (var k=0;k<VOICES.length;k++) if (/^en/i.test(VOICES[k].lang||'')) return VOICES[k];
+  return null;
+}
+function say(text, rate){
+  if (!SYN || !text) return;
+  try { SYN.cancel(); } catch(e){}
+  var u = new SpeechSynthesisUtterance(String(text));
+  var v = pickVoice();
+  if (v) u.voice = v;
+  u.lang = (v && v.lang) ? v.lang : 'en-US';
+  u.rate = rate || 0.9; u.pitch = 1; u.volume = 1;
+  try { SYN.speak(u); } catch(e){}
+}
+if (SYN) { refreshVoices(); SYN.onvoiceschanged = refreshVoices; }
+if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('pointerdown', function(){ TOUCHED = true; }, true);
+
 var S = load(KEY);
 if (!S.v) S.v = {};
 if (!S.sel) S.sel = 0;
@@ -143,12 +174,13 @@ function renderQuiz(){
   var w = Q[QI];
   box.innerHTML =
     '<div class="qbar"><span>这一轮第 ' + (QI+1) + ' / ' + Q.length + ' 个</span><span>' + fmt(E) + '</span></div>' +
-    '<div class="word">' + w.w + '</div>' +
+    '<div class="wordline"><div class="word">' + w.w + '</div><button class="spk" id="spw" aria-label="读这个词">🔊</button></div>' +
     '<div class="ph">先自己想一下意思，再点开对答案</div>' +
     '<div class="reveal" id="rv" style="display:none">' +
       '<div class="en">' + w.en + '</div>' +
       '<div class="zh">' + w.zh + '</div>' +
       '<div class="meta">这一集里出现了 ' + w.c + ' 次</div>' +
+      '<button class="mini" id="spe">🔊 读这一句</button>' +
     '</div>' +
     '<button class="btn" id="shw">看例句</button>' +
     '<div class="row" id="gd" style="display:none">' +
@@ -161,6 +193,9 @@ function renderQuiz(){
     document.getElementById('gd').style.display = 'flex';
     this.style.display = 'none';
   };
+  document.getElementById('spw').onclick = function(){ say(w.w, 0.75); };
+  document.getElementById('spe').onclick = function(){ say(w.en, 0.85); };
+  if (SYN && TOUCHED && S.auto !== 0) say(w.w, 0.75);
   var bs = box.querySelectorAll('#gd .btn');
   for (var i=0;i<bs.length;i++) bs[i].onclick = function(){
     rec(E)[w.w] = parseInt(this.getAttribute('data-v'),10);
@@ -173,10 +208,15 @@ function renderList(){
   for (var i=0;i<ws.length;i++){
     var w = ws[i], v = r[w.w];
     var cls = v === 2 ? 'v2' : v === 1 ? 'v1' : v === 0 ? 'v0' : '';
-    h += '<div class="it" data-i="' + i + '"><b>' + w.w + '</b><span class="cnt">×' + w.c + '</span><span class="dot ' + cls + '"></span></div>' +
+    h += '<div class="it" data-i="' + i + '"><b>' + w.w + '</b><span class="cnt">×' + w.c + '</span><span class="spk sm" data-sp="' + i + '">🔊</span><span class="dot ' + cls + '"></span></div>' +
          '<div class="eg" id="eg' + i + '"><div class="en">' + w.en + '</div><div>' + w.zh + '</div></div>';
   }
   document.getElementById('list').innerHTML = h;
+  var spk = document.querySelectorAll('.spk.sm');
+  for (var q=0;q<spk.length;q++) spk[q].onclick = function(ev){
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    say(ws[parseInt(this.getAttribute('data-sp'), 10)].w, 0.75);
+  };
   var its = document.querySelectorAll('.it');
   for (var j=0;j<its.length;j++) its[j].onclick = function(){
     var g = document.getElementById('eg' + this.getAttribute('data-i'));
@@ -216,6 +256,9 @@ document.getElementById('reset').onclick = function(){
 
 E = curEp();
 S.sel = E; save(KEY,S);
+var cb = document.getElementById('autospk');
+cb.checked = S.auto !== 0;
+cb.onchange = function(){ S.auto = this.checked ? 1 : 0; save(KEY, S); };
 renderSel(); startQuiz(); renderList(); renderStat();
 </script>
 </body></html>
