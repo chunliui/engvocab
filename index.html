@@ -291,7 +291,7 @@ document.getElementById('reset').onclick = function(){
 E = curEp();
 S.sel = E; save(KEY,S);
 document.getElementById('t1').onclick = function(){ say('duvet'); };
-document.getElementById('t2').onclick = function(){ say('My body is warm under the duvet.'); };
+document.getElementById('t2').onclick = function(){ say('It is a disaster zone'); };
 var cb = document.getElementById('autospk');
 cb.checked = S.auto !== 0;
 cb.onchange = function(){ S.auto = this.checked ? 1 : 0; save(KEY, S); };
