@@ -81,7 +81,7 @@ a{color:#0f766e}
       <select class="sel" id="esel"></select>
       <div class="plain" style="margin-top:14px" id="stat"></div>
       <label class="tog"><input type="checkbox" id="autospk" checked> 换到新词时自动读一遍</label>
-      <div class="plain" style="margin-top:12px">现在的发音：<b id="vmode">还没试过</b></div>
+      <div class="plain" style="margin-top:12px">现在的发音：<b id="vmode">还没试过</b>　<span class="plain" style="font-size:12px">（词用本地音频，例句用在线的）</span></div>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
         <button class="mini" id="t1">试读一个单词</button>
         <button class="mini" id="t2">试读一个例句</button>
@@ -121,6 +121,20 @@ function pickVoice(){
 }
 var AU = null, AUDIO_MODE = false, MODE_TXT = '';
 function setMode(t){ MODE_TXT = t; var el = document.getElementById('vmode'); if (el) el.textContent = t; }
+function wsrc(w){ return 'w/' + String(w).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '.mp3'; }
+var CUR_AUDIO = null;
+function playWord(w, rate){
+  try {
+    var a = new Audio();
+    CUR_AUDIO = a;
+    a.src = wsrc(w);
+    a.playbackRate = rate || 0.85;
+    a.onerror = function(){ setMode('这个词的本地音频没加载出来，改用在线语音'); playAudio(w, rate); };
+    var pr = a.play();
+    if (pr && pr.catch) pr.catch(function(e){ setMode('浏览器拦下了播放（' + ((e && e.name) || '') + '），再点一次'); });
+    setMode('本地音频（不联网）');
+  } catch(e){ playAudio(w, rate); }
+}
 function playAudio(text, rate){
   try {
     if (!AU) AU = new Audio();
@@ -134,6 +148,7 @@ function playAudio(text, rate){
 }
 function say(text, rate){
   if (!text) return;
+  if (/^[A-Za-z][A-Za-z'\-]*$/.test(String(text).trim())) { playWord(text, 0.85); return; }
   if (AUDIO_MODE || !SYN) { playAudio(text, 0.9); return; }
   try { SYN.cancel(); } catch(e){}
   var u = new SpeechSynthesisUtterance(String(text));
