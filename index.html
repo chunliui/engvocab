@@ -81,6 +81,11 @@ a{color:#0f766e}
       <select class="sel" id="esel"></select>
       <div class="plain" style="margin-top:14px" id="stat"></div>
       <label class="tog"><input type="checkbox" id="autospk" checked> 换到新词时自动读一遍</label>
+      <div class="plain" style="margin-top:12px">现在的发音：<b id="vmode">还没试过</b></div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="mini" id="t1">试读一个单词</button>
+        <button class="mini" id="t2">试读一个例句</button>
+      </div>
       <button class="btn ghost" id="reset" style="margin-top:14px">清空本页记录</button>
     </div>
   </details>
@@ -92,7 +97,7 @@ a{color:#0f766e}
       再把他简介里点名的重点词提到最前面，每集取 <b>30 个</b>。取的时候有个硬条件：<b>这个词在这一集里至少出现 3 次</b>——出现一次的偶然词不进卡，因为它没有语境可依。<br><br>
       例句和中文都是那一集的原句原译，所以看到词就看到了它真正用在哪。<br><br>
       <b>没有给中文释义是有意的</b>：直接看「duvet＝被子」是记不住的，看「My body is warm under the duvet. 被窝里很暖和」才记得住。<br><br>
-      <b>语音</b>是用手机自带的朗读（iPhone 的「朗读内容」/ 安卓的「文字转语音」），不联网、不装东西、不花钱。点 🔊 读单词，点「读这一句」读整句。如果没声音，去手机设置里检查有没有装英文语音包。<br><br>
+      <b>语音</b>是用手机自带的朗读（iPhone 的「朗读内容」/ 安卓的「文字转语音」），不联网、不装东西、不花钱。点 🔊 读单词，点「读这一句」读整句。如果没声音，会自动换成**在线语音**（有道词典的发音接口，需要联网），不用你装任何东西。<br><br>
       一天 5 个，一集 30 个够你走 6 天。一集在 30 天计划里只有 2–5 天，所以<b>词永远是备着的，比你的进度多</b>——别追，多出来的放着，下次路过这集再捡。
     </div>
   </details>
@@ -114,15 +119,34 @@ function pickVoice(){
   for (var k=0;k<VOICES.length;k++) if (/^en/i.test(VOICES[k].lang||'')) return VOICES[k];
   return null;
 }
+var AU = null, AUDIO_MODE = false, MODE_TXT = '';
+function setMode(t){ MODE_TXT = t; var el = document.getElementById('vmode'); if (el) el.textContent = t; }
+function playAudio(text, rate){
+  try {
+    if (!AU) AU = new Audio();
+    AU.pause();
+    AU.src = 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(String(text)) + '&type=2';
+    AU.playbackRate = rate || 0.9;
+    var pr = AU.play();
+    if (pr && pr.catch) pr.catch(function(){ setMode('播放被拦住了，再点一次'); });
+    setMode('在线语音（有道，需要网）');
+  } catch(e){ setMode('这个浏览器放不出声音'); }
+}
 function say(text, rate){
-  if (!SYN || !text) return;
+  if (!text) return;
+  if (AUDIO_MODE || !SYN) { playAudio(text, 0.9); return; }
   try { SYN.cancel(); } catch(e){}
   var u = new SpeechSynthesisUtterance(String(text));
   var v = pickVoice();
   if (v) u.voice = v;
   u.lang = (v && v.lang) ? v.lang : 'en-US';
   u.rate = rate || 0.9; u.pitch = 1; u.volume = 1;
-  try { SYN.speak(u); } catch(e){}
+  try { SYN.speak(u); } catch(e){ AUDIO_MODE = true; playAudio(text, 0.9); return; }
+  setMode('手机自带朗读');
+  setTimeout(function(){
+    if (AUDIO_MODE) return;
+    if (!SYN.speaking && !SYN.pending) { AUDIO_MODE = true; playAudio(text, 0.9); }
+  }, 800);
 }
 if (SYN) { refreshVoices(); SYN.onvoiceschanged = refreshVoices; }
 if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('pointerdown', function(){ TOUCHED = true; }, true);
@@ -256,6 +280,9 @@ document.getElementById('reset').onclick = function(){
 
 E = curEp();
 S.sel = E; save(KEY,S);
+document.getElementById('t1').onclick = function(){ say('duvet', 0.75); };
+document.getElementById('t2').onclick = function(){ say('My body is warm under the duvet.', 0.85); };
+if (!SYN) setMode('你的浏览器没有朗读功能，已改用在线语音');
 var cb = document.getElementById('autospk');
 cb.checked = S.auto !== 0;
 cb.onchange = function(){ S.auto = this.checked ? 1 : 0; save(KEY, S); };
