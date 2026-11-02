@@ -65,6 +65,12 @@ details.card[open]>summary:after{content:" −"}
 .list .mn{font-size:12px;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kc{font-style:normal;font-size:10px;font-weight:600;color:#0f766e;background:#e6fffa;border-radius:4px;padding:0 4px;margin-left:5px;vertical-align:2px}
 .dn{font-style:normal;font-size:10px;color:#6b7280;background:#f3f4f6;border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:2px}
+.segbar{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}
+.dbtn{flex:1 1 0;min-width:60px;background:#fff;border:1px solid #e5e7eb;border-radius:9px;padding:7px 4px;text-align:center;cursor:pointer;font:inherit;color:inherit}
+.dbtn b{display:block;font-size:12.5px;color:#111827}
+.dbtn span{display:block;font-size:10.5px;color:#9ca3af;margin-top:2px}
+.dbtn.on{border-color:#0f766e;background:#ecfdf5}
+.dbtn.on b{color:#0f766e}
 .plain{font-size:13.5px;color:#4b5563;line-height:1.75}
 .plain b{color:#111827}
 a{color:#0f766e}
@@ -78,6 +84,7 @@ a{color:#0f766e}
     <div class="num"><span id="hn">0 / —</span><span id="hp">0%</span></div>
     <div class="bar"><i id="hb" style="width:0%"></i></div>
     <div class="plain" id="tdy" style="margin-top:10px;font-size:12.5px"></div>
+    <div class="segbar" id="days"></div>
   </div>
 
   <div class="card" id="quiz"></div>
@@ -166,6 +173,7 @@ if (!S.sel) S.sel = 0;
 function per(){ var a = load(E30); var p = parseInt(a.per,10); return (p>=2&&p<=5)?p:4; }
 function doneCnt(){ var a = load(E30); var c = 0; for (var i=1;i<=30;i++) if (a.done && a.done[i]) c++; return c; }
 function curEp(){
+  if (S.epo && S.epo >= 1 && S.epo <= DATA.eps.length) return S.epo;
   var c = doneCnt();
   if (c > 0) { var d = Math.min(c + 1, 30); return Math.min(Math.ceil(d / per()), DATA.eps.length); }
   return S.sel || 1;
@@ -176,8 +184,30 @@ function epData(n){ return DATA.eps[n-1] || DATA.eps[0]; }
 function rec(n){ if (!S.v[n]) S.v[n] = {}; return S.v[n]; }
 function fmt(n){ return 'Ep.' + n + ' ' + epData(n).t; }
 function todayIdx(){
-  var p = per(), d = Math.min(doneCnt() + 1, 30);
+  var p = per(), ov = parseInt(S.dayv, 10);
+  if (ov >= 1 && ov <= p) return ov;
+  var d = Math.min(doneCnt() + 1, 30);
   return ((d - 1) % p) + 1;
+}
+function segParam(){
+  try {
+    var q = (location.search || '').replace(/^\?/, '');
+    if (!q) return;
+    q.split('&').forEach(function (kv) {
+      var a = kv.split('='), v = parseInt(a[1], 10);
+      if (a[0] === 'ep' && v >= 1 && v <= DATA.eps.length) S.epo = v;
+      if (a[0] === 'day' && v >= 1) S.dayv = v;
+    });
+  } catch (e) {}
+}
+function renderDays(){
+  var box = document.getElementById('days'); if (!box) return;
+  var p = per(), t = todayIdx(), h = '';
+  for (var i = 1; i <= p; i++) {
+    var cnt = epData(E).w.filter(function (w) { return dayOfWord(w) === i; }).length;
+    h += '<button class="dbtn' + (i === t ? ' on' : '') + '" data-day="' + i + '"><b>第' + i + '天</b><span>' + cnt + ' 词</span></button>';
+  }
+  box.innerHTML = h;
 }
 function dayOfWord(w){
   var L = epData(E).l || 150, p = per(), chunk = L / p;
@@ -321,11 +351,21 @@ function renderSel(){
   s.onchange = function(){ S.sel = parseInt(this.value,10); save(KEY,S); E = S.sel; startQuiz(); renderList(); renderStat(); };
 }
 
+document.addEventListener('click', function (e) {
+  var x = e.target;
+  while (x && x.getAttribute && !x.getAttribute('data-day')) { x = x.parentNode; }
+  if (!x || !x.getAttribute) return;
+  var i = parseInt(x.getAttribute('data-day'), 10);
+  if (!i) return;
+  S.dayv = i; save(KEY, S);
+  startQuiz(); renderList(); renderStat(); renderDays();
+});
 document.getElementById('reset').onclick = function(){
   if (!confirm('清空所有集的背词记录？')) return;
   S.v = {}; save(KEY,S); startQuiz(); renderList(); renderStat();
 };
 
+segParam();
 E = curEp();
 S.sel = E; save(KEY,S);
 document.getElementById('t1').onclick = function(){ say('duvet'); };
@@ -333,6 +373,6 @@ document.getElementById('t2').onclick = function(){ say('It is a disaster zone')
 var cb = document.getElementById('autospk');
 cb.checked = S.auto !== 0;
 cb.onchange = function(){ S.auto = this.checked ? 1 : 0; save(KEY, S); };
-renderSel(); startQuiz(); renderList(); renderStat();
+renderSel(); startQuiz(); renderList(); renderStat(); renderDays();
 </script>
 </body></html>
