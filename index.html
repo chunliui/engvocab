@@ -32,6 +32,10 @@ body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Micr
 .rend{font-size:15.5px;color:#111827;line-height:1.6}
 .rz{font-size:12.5px;color:#9ca3af;margin-top:3px;line-height:1.5}
 .rcur{background:#ecfdf5;border-radius:8px;padding:2px 4px;margin:0 -4px}
+#dnum{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0 2px}
+#dnum .lbl{font-size:12px;color:#9ca3af}
+#dnum button{border:1px solid #e5e7eb;background:#fff;color:#374151;border-radius:8px;padding:4px 9px;font-size:12px;cursor:pointer}
+#dnum button.on{border-color:#0f766e;background:#ecfdf5;color:#0f766e;font-weight:700}
 #drates{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0 4px}
 #drates .lbl{font-size:12px;color:#9ca3af}
 #drates button{border:1px solid #e5e7eb;background:#fff;color:#374151;border-radius:8px;padding:4px 9px;font-size:12px;cursor:pointer}
@@ -200,7 +204,7 @@ function curEp(){
   return S.sel || 1;
 }
 var UNIQ = (function(){var s = {}, c = 0; for (var i=0;i<DATA.eps.length;i++){var w = DATA.eps[i].w; for (var j=0;j<w.length;j++){ if (!s[w[j].w]) { s[w[j].w] = 1; c++; } }} return c;})();
-var E = 0, Q = [], QI = 0, SHOWN = false;
+var E = 0, Q = [], QI = 0, SHOWN = false, DQ = [];
 function epData(n){ return DATA.eps[n-1] || DATA.eps[0]; }
 function rec(n){ if (!S.v[n]) S.v[n] = {}; return S.v[n]; }
 function fmt(n){ return 'Ep.' + n + ' ' + epData(n).t; }
@@ -242,7 +246,7 @@ function sents(){ return (typeof TXT !== 'undefined' && TXT[E]) ? TXT[E] : []; }
 function renderViews(){
   var box = document.getElementById('views'); if (!box) return;
   var arr = [['word', '背词'], ['dict', '听力 · 听写'], ['read', '阅读']], h = '';
-  for (var i = 0; i < arr.length; i++) h += '<button class="dbtn' + (VIEW === arr[i][0] ? ' on' : '') + '" data-v="' + arr[i][0] + '"><b>' + arr[i][1] + '</b></button>';
+  for (var i = 0; i < arr.length; i++) h += '<button class="dbtn' + (VIEW === arr[i][0] ? ' on' : '') + '" data-view="' + arr[i][0] + '"><b>' + arr[i][1] + '</b></button>';
   box.innerHTML = h;
 }
 function speedRow(){
@@ -252,12 +256,16 @@ function speedRow(){
 }
 function renderDict(){
   var box = document.getElementById('vDict'); if (!box || VIEW !== 'dict') return;
-  var r = segRange(todayIdx()), S2 = sents(), d = todayIdx(), P = per(), h = '';
-  h += '<h2>听写 · 第 ' + r.s1 + '–' + r.s2 + ' 句</h2>';
-  h += '<div class="plain" style="margin-top:8px">' + fmt(E) + ' · 第 ' + d + '/' + P + ' 天。三遍法：① 只听不写 ② 写下听到的音 ③ 再听一遍补全，最后才点「看答案」。</div>';
+  var r = dictRange(), S2 = sents(), d = todayIdx(), P = per(), h = '';
+  h += '<h2>听写 · 第 ' + r.n1 + '–' + r.n2 + ' 句（' + (r.n2 - r.n1 + 1) + ' 句）</h2>';
+  h += '<div class="plain" style="margin-top:8px">' + fmt(E) + ' · 第 ' + d + '/' + P + ' 段，这一段阅读是第 ' + r.a1 + '–' + r.a2 + ' 句。三遍法：① 只听不写 ② 写下听到的音 ③ 再听一遍补全，最后才点「看答案」。</div>';
+  h += '<div id="dnum"><span class="lbl">每天几句</span>';
+  var opts = [5, 8, 10, 12], cur = dictN();
+  for (var q = 0; q < opts.length; q++) h += '<button data-dn="' + opts[q] + '"' + (opts[q] === cur ? ' class="on"' : '') + '>' + opts[q] + '</button>';
+  h += '</div>';
   h += speedRow();
   if (!S2.length) { h += '<div class="plain">这一集的句子还没载入（txt.js 没下下来），刷新一下试试。</div>'; }
-  for (var n = r.s1; n <= r.s2; n++) {
+  for (var n = r.n1; n <= r.n2; n++) {
     var t = S2[n - 1]; if (!t) continue;
     h += '<div class="srow"><div class="shd"><b>第 ' + n + ' 句</b>' +
       '<button class="mini" data-play="' + n + '">▶ 播一遍</button>' +
@@ -290,28 +298,38 @@ function applyView(){
   document.getElementById('vRead').style.display = VIEW === 'read' ? '' : 'none';
   renderViews(); renderDict(); renderRead();
 }function dayOfWord(w){
-  var L = epData(E).l || 150, p = per(), chunk = L / p;
-  var k = Math.ceil((w.ln || 1) / chunk);
-  if (k < 1) k = 1;
-  if (k > p) k = p;
-  return k;
+  var L = epData(E).l || 150, p = per(), ln = w.ln || 1;
+  for (var i = 1; i <= p; i++) if (ln <= Math.floor(i * L / p)) return i;
+  return p;
+}
+function dayWords(){
+  var t = todayIdx();
+  return epData(E).w.filter(function (x) { return dayOfWord(x) === t; });
+}
+function dictN(){
+  var o = parseInt(S.dn, 10);
+  if (o >= 3 && o <= 20) return o;
+  var L = epData(E).l || 150, p = per(), n = Math.round(L / p / 5);
+  return Math.max(5, Math.min(12, n));
+}
+function dictRange(){
+  var r = segRange(todayIdx()), n1 = r.s1, n2 = Math.min(r.a2, n1 + dictN() - 1);
+  return { n1: n1, n2: n2, a1: r.a1, a2: r.a2 };
 }
 
 function startQuiz(refresh){
-  var n = E, ws = epData(n).w, r = rec(n);
-  var todo = ws.filter(function(x){ return r[x.w] === undefined; });
-  var today = todayIdx();
-  var mine = todo.filter(function(x){ return dayOfWord(x) === today; });
-  var pick = mine.slice(0, 5);
-  if (pick.length < 5) {
-    var rest = todo.filter(function(x){ return pick.indexOf(x) < 0; })
-      .sort(function(a, b){ return Math.abs(dayOfWord(a) - today) - Math.abs(dayOfWord(b) - today); });
-    pick = pick.concat(rest.slice(0, 5 - pick.length));
-  }
-  if (!todo.length) { Q = ws.slice(); }
-  else { Q = pick.length ? pick : ws.slice(0, 5); }
+  var r = rec(E);
+  DQ = dayWords().filter(function (x) { return r[x.w] !== 2; });
+  DQ.forEach(function (x) { x._n = 0; });
+  Q = DQ;
   QI = 0; SHOWN = false;
   renderQuiz();
+}
+function againAll(){
+  var r = rec(E);
+  dayWords().forEach(function (x) { delete r[x.w]; });
+  save(KEY, S);
+  startQuiz(); renderList(); renderStat();
 }
 var RATES = [0.6, 0.75, 0.85, 1, 1.25];
 function rateBtns(){ var h = '<span class="lbl">速度</span>', r = rate(); for (var i=0;i<RATES.length;i++){ var on = Math.abs(RATES[i]-r) < 0.01; h += '<button data-r="' + RATES[i] + '"' + (on ? ' class="on"' : '') + '>' + RATES[i] + '×</button>'; } return h; }
@@ -333,18 +351,19 @@ function renderQuiz(){
   document.getElementById('hb').style.width = pct + '%';
   document.getElementById('lt').textContent = '本集 ' + ws.length + ' 个词（标「核」的 30 个是重点）';
 
-  if (QI >= Q.length) {
-    var left = ws.length - learned;
-    box.innerHTML = '<div class="done"><div class="big">这一轮过完了</div>' +
-      '<div class="hint">还有 ' + left + ' 个词没碰过' + (left ? '，再点一轮就是它们' : '') + '。</div></div>' +
-      '<button class="btn" id="again">' + (left ? '再来 5 个' : '把这 ' + ws.length + ' 个再刷一遍') + '</button>';
-    document.getElementById('again').onclick = function(){ startQuiz(); };
+  if (!DQ.length) {
+    var dw = dayWords(), rated = dw.filter(function (x) { return r[x.w] !== undefined; }).length;
+    box.innerHTML = '<div class="done"><div class="big">这一段过完了</div>' +
+      '<div class="hint">第 ' + todayIdx() + '/' + per() + ' 段的 ' + dw.length + ' 个词都过了一遍（标过 ' + rated + ' 个，' +
+      '「会了」的不再出现）。<br>想再滚一遍就点下面，只重来这一段，不会跑到别的天。</div></div>' +
+      '<button class="btn" id="again">把这一段从头再来一遍</button>';
+    document.getElementById('again').onclick = function () { againAll(); };
     renderList(); renderStat();
     return;
   }
-  var w = Q[QI];
+  var w = DQ[0];
   box.innerHTML =
-    '<div class="qbar"><span>这一轮第 ' + (QI+1) + ' / ' + Q.length + ' 个</span><span>' + fmt(E) + '</span></div>' +
+    '<div class="qbar"><span>这一段还剩 ' + DQ.length + ' 个没清</span><span>第 ' + todayIdx() + '/' + per() + ' 段</span></div>' +
     '<div class="wordline"><div class="word">' + w.w + '</div><button class="spk" id="spw" aria-label="读这个词">🔊</button></div>' +
     '<div class="rates" id="rates">' + rateBtns() + '</div>' +
     '<div class="ph">先自己想一下意思，再点开对答案</div>' +
@@ -380,8 +399,14 @@ function renderQuiz(){
   if (S.auto !== 0 && TOUCHED) say(w.w);
   var bs = box.querySelectorAll('#gd .btn');
   for (var i=0;i<bs.length;i++) bs[i].onclick = function(){
-    rec(E)[w.w] = parseInt(this.getAttribute('data-v'),10);
-    save(KEY, S); QI++; renderQuiz();
+    var v = parseInt(this.getAttribute('data-v'), 10);
+    rec(E)[w.w] = v;
+    save(KEY, S);
+    DQ.shift();
+    w._n = (w._n || 0) + 1;
+    if (v === 1 && w._n < 4) DQ.splice(Math.min(DQ.length, 4), 0, w);
+    if (v === 0 && w._n < 5) DQ.splice(Math.min(DQ.length, 2), 0, w);
+    renderQuiz();
   };
 }
 
@@ -435,14 +460,16 @@ document.addEventListener('click', function (e) {
   function up(attr) { var y = e.target; while (y && y.getAttribute && !y.getAttribute(attr)) y = y.parentNode; return (y && y.getAttribute) ? y : null; }
   var x = up('data-day');
   if (x) { var i = parseInt(x.getAttribute('data-day'), 10); if (i) { S.dayv = i; save(KEY, S); startQuiz(); renderList(); renderStat(); renderDays(); applyView(); return; } }
-  x = up('data-v');
-  if (x) { VIEW = x.getAttribute('data-v'); applyView(); return; }
+  x = up('data-view');
+  if (x) { VIEW = x.getAttribute('data-view'); applyView(); return; }
   x = up('data-play');
   if (x) { var t = sents()[parseInt(x.getAttribute('data-play'), 10) - 1]; if (t) playSent(t[0]); return; }
   x = up('data-show');
   if (x) { var el = document.getElementById('st' + x.getAttribute('data-show')); if (el) el.style.display = (el.style.display === 'none') ? '' : 'none'; return; }
   x = up('data-zh');
   if (x) { var z = document.getElementById('rz' + x.getAttribute('data-zh')); if (z) z.style.display = (z.style.display === 'none') ? '' : 'none'; return; }
+  x = up('data-dn');
+  if (x) { S.dn = parseInt(x.getAttribute('data-dn'), 10); save(KEY, S); renderDict(); return; }
   x = up('data-r2');
   if (x) { S.rate = parseFloat(x.getAttribute('data-r2')); save(KEY, S); renderDict(); renderRead(); return; }
 });
