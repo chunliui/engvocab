@@ -90,6 +90,11 @@ details.card[open]>summary:after{content:" −"}
 .dbtn span{display:block;font-size:10.5px;color:#9ca3af;margin-top:2px}
 .dbtn.on{border-color:#0f766e;background:#ecfdf5}
 .dbtn.on b{color:#0f766e}
+.wd{cursor:pointer;border-bottom:1px dashed rgba(15,118,110,.35)}
+.wd.on{background:#fef3c7;border-bottom-color:#f59e0b;border-radius:3px}
+.nbrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 2px}
+.tip{font-size:11px;color:#9ca3af;margin-left:2px}
+b.nw{font-size:15px;color:#111827}
 .plain{font-size:13.5px;color:#4b5563;line-height:1.75}
 .plain b{color:#111827}
 a{color:#0f766e}
@@ -112,6 +117,8 @@ a{color:#0f766e}
   <div class="card" id="vDict" style="display:none"></div>
 
   <div class="card" id="vRead" style="display:none"></div>
+
+  <div class="card" id="vNB" style="display:none"></div>
 
   <div class="card" id="listCard">
     <h2 id="lt">本集全部词</h2>
@@ -245,7 +252,7 @@ function segRange(i){
 function sents(){ return (typeof TXT !== 'undefined' && TXT[E]) ? TXT[E] : []; }
 function renderViews(){
   var box = document.getElementById('views'); if (!box) return;
-  var arr = [['word', '背词'], ['dict', '听力 · 听写'], ['read', '阅读']], h = '';
+  var arr = [['word', '背词'], ['dict', '听力 · 听写'], ['read', '阅读'], ['nb', '生词本']], h = '';
   for (var i = 0; i < arr.length; i++) h += '<button class="dbtn' + (VIEW === arr[i][0] ? ' on' : '') + '" data-view="' + arr[i][0] + '"><b>' + arr[i][1] + '</b></button>';
   box.innerHTML = h;
 }
@@ -284,9 +291,60 @@ function renderRead(){
   for (var n = r.a1; n <= r.a2; n++) {
     var t = S2[n - 1]; if (!t) continue;
     h += '<div class="srow" id="rw' + n + '"><div class="shd"><b>' + n + '</b>' +
-      '<button class="mini" data-play="' + n + '">▶</button></div>' +
-      '<div class="rend" data-zh="' + n + '">' + esc(t[0]) + '</div>' +
+      '<button class="mini" data-play="' + n + '">▶</button>' +
+      '<button class="mini" data-zh="' + n + '">中</button>' +
+      '<span class="tip">点句子里任何一个词 → 收进生词本</span></div>' +
+      '<div class="rend" id="rd' + n + '">' + tokLine(t[0], E, t[1]) + '</div>' +
       '<div class="rz" id="rz' + n + '" style="display:none">' + esc(t[1]) + '</div></div>';
+  }
+  box.innerHTML = h;
+}
+function nb(){ if (!S.nb) S.nb = {}; return S.nb; }
+function nbCount(){ var n = nb(), c = 0; for (var k in n) if (n.hasOwnProperty(k)) c++; return c; }
+function escAttr(t){ return esc(t).replace(/"/g, '&quot;'); }
+function nbToggle(w, ep, en, zh){
+  var n = nb(), k = String(w).toLowerCase(), added;
+  if (n[k]) { delete n[k]; added = false; }
+  else { n[k] = { ep: ep || E, en: en || '', zh: zh || '', t: Date.now() }; added = true; }
+  save(KEY, S);
+  var qb = document.getElementById('nbw');
+  if (qb) qb.innerHTML = n[k] ? '★ 已在生词本（点一下移出）' : '☆ 加入生词本';
+  renderRead(); renderNB(); renderViews();
+  return added;
+}
+function tokLine(en, ep, zh){
+  var parts = String(en).split(/(\s+)/), n = nb(), out = [];
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i], m = p.match(/^([A-Za-z][A-Za-z'\-]*)(.*)$/);
+    if (!m) { out.push(esc(p)); continue; }
+    var k = m[1].toLowerCase();
+    out.push('<span class="wd' + (n[k] ? ' on' : '') + '" data-nb="' + escAttr(k) + '" data-ep="' + ep + '" data-en="' + escAttr(en) + '" data-zhs="' + escAttr(zh) + '">' + esc(m[1]) + '</span>' + esc(m[2]));
+  }
+  return out.join('');
+}
+var NBQUIZ = 0;
+function renderNB(){
+  var box = document.getElementById('vNB'); if (!box || VIEW !== 'nb') return;
+  var n = nb(), keys = Object.keys(n), h = '';
+  h += '<h2>生词本 · ' + keys.length + ' 个词</h2>';
+  h += '<div class="plain" style="margin-top:8px">这里跟你每天的背词任务是两回事：阅读时点句子里任何一个词就收进来，再点一下取消；不影响哪一天背多少个。</div>';
+  if (!keys.length) {
+    h += '<div class="plain" style="margin-top:14px">还没有生词。去「阅读」页，点句子里不太熟的那个词。</div>';
+  } else {
+    h += '<div class="nbrow"><button class="mini" data-nbq="1">' + (NBQUIZ ? '看释义模式' : '遮住释义自测') + '</button>' +
+      '<button class="mini" data-nbclear="1">清空生词本</button></div>';
+  }
+  for (var i = keys.length - 1; i >= 0; i--) {
+    var k = keys[i], v = n[k];
+    h += '<div class="srow"><div class="shd"><b class="nw">' + esc(k) + '</b>' +
+      '<i class="dn">Ep.' + (v.ep || '?') + '</i>' +
+      '<button class="mini" data-nbw="' + escAttr(k) + '">🔊</button>' +
+      (NBQUIZ ? '<button class="mini" data-nbshow="' + escAttr(k) + '">看答案</button>' : '') +
+      '<button class="mini" data-nbr="' + escAttr(k) + '">移出</button></div>' +
+      '<div id="nbd' + escAttr(k) + '"' + (NBQUIZ ? ' style="display:none"' : '') + '>' +
+        (defHtml(k) || '<div class="def"><div>（暂无释义，看例句猜）</div></div>') +
+        (v.en ? '<div class="stxt"><div class="sen">' + esc(v.en) + '</div><div class="zh">' + esc(v.zh) + '</div></div>' : '') +
+      '</div></div>';
   }
   box.innerHTML = h;
 }
@@ -296,7 +354,8 @@ function applyView(){
   var lc = document.getElementById('listCard'); if (lc) lc.style.display = w ? '' : 'none';
   document.getElementById('vDict').style.display = VIEW === 'dict' ? '' : 'none';
   document.getElementById('vRead').style.display = VIEW === 'read' ? '' : 'none';
-  renderViews(); renderDict(); renderRead();
+  var vb = document.getElementById('vNB'); if (vb) vb.style.display = VIEW === 'nb' ? '' : 'none';
+  renderViews(); renderDict(); renderRead(); renderNB();
 }function dayOfWord(w){
   var L = epData(E).l || 150, p = per(), ln = w.ln || 1;
   for (var i = 1; i <= p; i++) if (ln <= Math.floor(i * L / p)) return i;
@@ -365,6 +424,7 @@ function renderQuiz(){
   box.innerHTML =
     '<div class="qbar"><span>这一段还剩 ' + DQ.length + ' 个没清</span><span>第 ' + todayIdx() + '/' + per() + ' 段</span></div>' +
     '<div class="wordline"><div class="word">' + w.w + '</div><button class="spk" id="spw" aria-label="读这个词">🔊</button></div>' +
+    '<div class="nbrow"><button class="mini" id="nbw" data-nb="' + escAttr(w.w) + '" data-ep="' + E + '" data-en="' + escAttr(w.en) + '" data-zhs="' + escAttr(w.zh) + '">' + (nb()[w.w] ? '★ 已在生词本（点一下移出）' : '☆ 加入生词本') + '</button></div>' +
     '<div class="rates" id="rates">' + rateBtns() + '</div>' +
     '<div class="ph">先自己想一下意思，再点开对答案</div>' +
     '<div class="reveal" id="rv" style="display:none">' +
@@ -466,6 +526,18 @@ document.addEventListener('click', function (e) {
   if (x) { var t = sents()[parseInt(x.getAttribute('data-play'), 10) - 1]; if (t) playSent(t[0]); return; }
   x = up('data-show');
   if (x) { var el = document.getElementById('st' + x.getAttribute('data-show')); if (el) el.style.display = (el.style.display === 'none') ? '' : 'none'; return; }
+  x = up('data-nbw');
+  if (x) { say(x.getAttribute('data-nbw')); return; }
+  x = up('data-nbr');
+  if (x) { delete nb()[x.getAttribute('data-nbr')]; save(KEY, S); renderNB(); renderRead(); return; }
+  x = up('data-nbq');
+  if (x) { NBQUIZ = NBQUIZ ? 0 : 1; renderNB(); return; }
+  x = up('data-nbshow');
+  if (x) { var nd = document.getElementById('nbd' + x.getAttribute('data-nbshow')); if (nd) nd.style.display = (nd.style.display === 'none') ? '' : 'none'; return; }
+  x = up('data-nbclear');
+  if (x) { if (confirm('清空生词本？背词记录不受影响')) { S.nb = {}; save(KEY, S); renderNB(); renderRead(); } return; }
+  x = up('data-nb');
+  if (x) { nbToggle(x.getAttribute('data-nb'), parseInt(x.getAttribute('data-ep'), 10) || E, x.getAttribute('data-en') || '', x.getAttribute('data-zhs') || ''); return; }
   x = up('data-zh');
   if (x) { var z = document.getElementById('rz' + x.getAttribute('data-zh')); if (z) z.style.display = (z.style.display === 'none') ? '' : 'none'; return; }
   x = up('data-dn');
